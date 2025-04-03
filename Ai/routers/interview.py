@@ -8,17 +8,6 @@ import re
 import os
 from enum import Enum
 
-app = FastAPI(title="AI Interview API")
-
-# Configure CORS for frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with your frontend URL
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 router = APIRouter()
 
 # Pydantic models
@@ -176,7 +165,7 @@ async def health_check():
     return {"status": "ok"}
 
 # Include router in app
-app.include_router(router, prefix="/api/interview", tags=["interview"])
+
 
 if __name__ == "__main__":
     import uvicorn

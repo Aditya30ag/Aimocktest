@@ -1,5 +1,5 @@
 import React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 
 const API_BASE_URL = "http://localhost:8000/api/interview";
@@ -56,6 +56,12 @@ export default function DashboardInterview() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Voice recognition references and state
+  const speechSynthesisRef = useRef(window.speechSynthesis);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+
   // Interview configuration
   const [interviewType, setInterviewType] = useState("software_engineer");
   const [jobDescription, setJobDescription] = useState("");
@@ -65,6 +71,46 @@ export default function DashboardInterview() {
   const [questions, setQuestions] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [completedQuestions, setCompletedQuestions] = useState([]);
+
+  // Initialize speech recognition
+  useEffect(() => {
+    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      
+      recognitionRef.current.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map(result => result[0])
+          .map(result => result.transcript)
+          .join('');
+        
+        setUserAnswer(transcript);
+      };
+      
+      recognitionRef.current.onerror = (event) => {
+        console.error('Speech recognition error', event.error);
+        setIsListening(false);
+      };
+      
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+    } else {
+      console.error('Speech recognition not supported');
+    }
+    
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      
+      if (speechSynthesisRef.current) {
+        speechSynthesisRef.current.cancel();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -78,6 +124,11 @@ export default function DashboardInterview() {
     // Simulate AI speaking when state changes to asking
     if (interviewState === "asking") {
       setIsAISpeaking(true);
+      
+      if (voiceEnabled && questions.length > 0 && currentQuestionIndex < questions.length) {
+        speakQuestion(questions[currentQuestionIndex].text);
+      }
+      
       const speakTimer = setTimeout(() => {
         setIsAISpeaking(false);
         setInterviewState("listening");
@@ -85,7 +136,37 @@ export default function DashboardInterview() {
       
       return () => clearTimeout(speakTimer);
     }
-  }, [interviewState]);
+  }, [interviewState, questions, currentQuestionIndex, voiceEnabled]);
+
+  const speakQuestion = (text) => {
+    if (speechSynthesisRef.current) {
+      speechSynthesisRef.current.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      
+      utterance.onstart = () => {
+        setIsAISpeaking(true);
+      };
+      
+      utterance.onend = () => {
+        setIsAISpeaking(false);
+        setInterviewState("listening");
+      };
+      
+      speechSynthesisRef.current.speak(utterance);
+    }
+  };
+
+  const toggleVoiceInput = () => {
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
 
   const formatTime = (date) => {
     return date.toLocaleTimeString([], {
@@ -126,6 +207,12 @@ export default function DashboardInterview() {
   const handleSubmitAnswer = async () => {
     if (!userAnswer.trim()) {
       return;
+    }
+    
+    // Stop listening if active
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
     }
     
     try {
@@ -179,6 +266,16 @@ export default function DashboardInterview() {
     setCompletedQuestions([]);
     setUserAnswer("");
     setFeedback(null);
+    
+    // Ensure speech is stopped
+    if (speechSynthesisRef.current) {
+      speechSynthesisRef.current.cancel();
+    }
+    
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
   };
 
   const currentQuestion = questions.length > 0 && currentQuestionIndex < questions.length 
@@ -327,6 +424,22 @@ export default function DashboardInterview() {
             </p>
           </div>
           
+          {/* Voice Controls */}
+          <div className="mt-4 w-full max-w-md">
+            <div className="flex items-center justify-between bg-gray-900/60 rounded-lg p-3">
+              <span className="text-gray-300 font-medium">Voice Interaction</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={voiceEnabled} 
+                  onChange={() => setVoiceEnabled(!voiceEnabled)} 
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          </div>
+          
           {/* Progress */}
           {questions.length > 0 && (
             <div className="w-full max-w-md mt-4 bg-gray-900/60 rounded-lg p-4">
@@ -439,7 +552,21 @@ export default function DashboardInterview() {
         <div className="w-full md:w-1/2 flex flex-col rounded-2xl overflow-hidden border border-gray-700/40">
           {/* Question Section */}
           <div className="bg-gray-800/50 backdrop-blur-sm p-6 border-b border-gray-700/40">
-            <h2 className="text-xl font-bold text-blue-400 mb-3">Question:</h2>
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-xl font-bold text-blue-400">Question:</h2>
+              {/* Play button to repeat question */}
+              {interviewState !== "setup" && interviewState !== "waiting" && (
+                <button 
+                  onClick={() => speakQuestion(currentQuestion)}
+                  disabled={isAISpeaking}
+                  className="p-2 bg-blue-600/20 hover:bg-blue-600/40 rounded-full text-blue-400 transition duration-200"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              )}
+            </div>
             <div className="p-4 bg-gray-900/60 rounded-lg shadow-inner">
               {interviewState === "setup" ? (
                 <p className="text-gray-400 italic">Configure your interview settings to generate questions</p>
@@ -451,20 +578,55 @@ export default function DashboardInterview() {
           
           {/* Answer Section */}
           <div className="flex-grow bg-gray-800/30 backdrop-blur-sm p-6 flex flex-col">
-            <h2 className="text-xl font-bold text-purple-400 mb-3">Your Answer:</h2>
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-xl font-bold text-purple-400">Your Answer:</h2>
+              
+              {/* Voice control buttons (only visible when in listening state) */}
+              {interviewState === "listening" && voiceEnabled && (
+                <button
+                  onClick={toggleVoiceInput}
+                  className={`p-2 ${isListening ? 'bg-red-600/20 hover:bg-red-600/40 text-red-400' : 'bg-green-600/20 hover:bg-green-600/40 text-green-400'} rounded-full transition duration-200`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                </button>
+              )}
+            </div>
             
             {interviewState === "feedback" || interviewState === "complete" ? (
               <div className="flex-grow p-4 bg-gray-900/60 rounded-lg shadow-inner overflow-y-auto">
                 <p className="text-gray-200">{userAnswer}</p>
               </div>
             ) : (
-              <textarea
-                className="flex-grow p-4 bg-gray-900/60 rounded-lg shadow-inner text-gray-200 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                placeholder={interviewState === "setup" ? "Answer will appear here once interview starts" : "Type your answer here..."}
-                value={userAnswer}
-                onChange={(e) => setUserAnswer(e.target.value)}
-                disabled={interviewState === "setup" || interviewState === "waiting" || interviewState === "asking"}
-              />
+              <div className="flex-grow flex flex-col">
+                <textarea
+                  className="flex-grow p-4 bg-gray-900/60 rounded-lg shadow-inner text-gray-200 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  placeholder={interviewState === "setup" 
+                    ? "Answer will appear here once interview starts" 
+                    : isListening 
+                      ? "Listening to your voice... Speak now" 
+                      : "Type your answer here or click the microphone to speak..."
+                  }
+                  value={userAnswer}
+                  onChange={(e) => setUserAnswer(e.target.value)}
+                  disabled={interviewState === "setup" || interviewState === "waiting" || interviewState === "asking" || isListening}
+                />
+                
+                {/* Voice indicator when active */}
+                {isListening && (
+                  <div className="mt-2 p-2 bg-green-900/20 text-green-400 text-center rounded-md text-sm">
+                    <div className="flex justify-center items-center">
+                      <span>Listening</span>
+                      <span className="ml-2 flex space-x-1">
+                        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: "0ms" }}></span>
+                        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: "200ms" }}></span>
+                        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: "400ms" }}></span>
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             
             {interviewState === "listening" && (
