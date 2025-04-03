@@ -4,6 +4,7 @@ import WelcomePage from "./components/WelcomePage";
 import HomePage from "./components/HomePage";
 import Login from "./components/Login";
 import Signup from "./components/SignUp";
+import DashboardInterview from "./components/DashboardInterview";
 
 function App() {
   const router = createBrowserRouter([
@@ -16,10 +17,18 @@ function App() {
       ),
     },
     {
-      path: "/home",
+      path: "/dashboard",
       element: (
         <>
           <HomePage />
+        </>
+      ),
+    },
+    {
+      path: "/dashboardmain",
+      element: (
+        <>
+          <DashboardInterview/>
         </>
       ),
     },

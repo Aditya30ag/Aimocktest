@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Moon, Sun } from 'lucide-react';
 
 const Signup = () => {
@@ -11,6 +11,7 @@ const Signup = () => {
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
+  const navigate = useNavigate();
 
   // Check system preference on initial load
   useEffect(() => {
@@ -47,6 +48,8 @@ const Signup = () => {
         password 
       });
       setMessage(response.data.message);
+      navigate('/dashboard'); // Redirect to dashboard after successful login
+      localStorage.setItem("useremail",response.data.user.email);
       // Typically you would handle the successful signup here (e.g., redirect)
     } catch (error) {
       setIsError(true);
